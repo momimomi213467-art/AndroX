@@ -10,6 +10,7 @@
     <application
         android:allowBackup="false"
         android:label="Calcolatrice"
+        android:icon="@drawable/ic_calculator"
         android:theme="@android:style/Theme.Material.NoActionBar"
         android:usesCleartextTraffic="false">
         <activity
