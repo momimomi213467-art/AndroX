@@ -26,11 +26,13 @@ class MainActivity : Activity() {
     private lateinit var root: LinearLayout
     private lateinit var pinDisplay: TextView
 
-    private val bg = Color.rgb(12, 17, 29)
-    private val panel = Color.rgb(24, 32, 49)
-    private val accent = Color.rgb(104, 132, 255)
-    private val muted = Color.rgb(151, 163, 184)
-    private val white = Color.WHITE
+    private val bg = Color.rgb(7, 10, 8)
+    private val panel = Color.rgb(24, 30, 25)
+    private val accent = Color.rgb(50, 220, 105)
+    private val muted = Color.rgb(142, 157, 145)
+    private val white = Color.rgb(235, 245, 237)
+    private val keyNumber = Color.rgb(34, 42, 35)
+    private val keyAction = Color.rgb(24, 75, 42)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,7 +56,7 @@ class MainActivity : Activity() {
         setupMode = !prefs.contains("pin")
         val box = baseScreen()
         val top = TextView(this).apply {
-            text = "ANDROX"
+            text = "CALCOLATRICE"
             textSize = 13f
             letterSpacing = .24f
             setTextColor(muted)
@@ -62,7 +64,7 @@ class MainActivity : Activity() {
         }
         box.addView(top, matchWrap())
         val heading = TextView(this).apply {
-            text = if (setupMode) "Crea il tuo PIN" else "Calcolatrice"
+            text = "Calcolatrice"
             textSize = 28f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(white)
@@ -72,8 +74,8 @@ class MainActivity : Activity() {
         box.addView(heading, hp)
 
         pinDisplay = TextView(this).apply {
-            text = if (setupMode) "Scegli 4–8 cifre" else "0"
-            textSize = if (setupMode) 16f else 34f
+            text = "0"
+            textSize = 48f
             setTextColor(white)
             gravity = Gravity.CENTER
             setPadding(0, dp(26), 0, dp(26))
@@ -86,14 +88,22 @@ class MainActivity : Activity() {
             val row = LinearLayout(this).apply { gravity = Gravity.CENTER }
             rowKeys.forEach { key ->
                 val button = Button(this).apply {
-                    text = key
-                    textSize = 22f
-                    setTextColor(white)
+                    text = if (key == "✓") "=" else key
+                    textSize = 23f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setTextColor(if (key == "✓") bg else white)
                     isAllCaps = false
-                    background = rounded(if (key == "✓") accent else panel, 24)
+                    stateListAnimator = null
+                    minHeight = 0
+                    minimumHeight = 0
+                    minWidth = 0
+                    minimumWidth = 0
+                    setPadding(0, 0, 0, 0)
+                    background = rounded(if (key == "✓") accent else keyNumber, 18)
+                    elevation = dp(1).toFloat()
                     setOnClickListener { onKey(key) }
                 }
-                val lp = LinearLayout.LayoutParams(0, dp(66), 1f).apply {
+                val lp = LinearLayout.LayoutParams(0, dp(70), 1f).apply {
                     setMargins(dp(5), dp(5), dp(5), dp(5))
                 }
                 row.addView(button, lp)
@@ -104,11 +114,11 @@ class MainActivity : Activity() {
         box.addView(grid, gridLp)
 
         val hint = TextView(this).apply {
-            text = if (setupMode) "Il PIN viene salvato solo su questo dispositivo." else "Inserisci il PIN per aprire lo spazio privato."
-            textSize = 13f
-            setTextColor(muted)
+            text = " "
+            textSize = 1f
+            setTextColor(bg)
             gravity = Gravity.CENTER
-            setPadding(0, dp(18), 0, 0)
+            setPadding(0, dp(8), 0, 0)
         }
         box.addView(hint, matchWrap())
     }
@@ -160,7 +170,7 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
         }
         val title = TextView(this).apply {
-            text = "Spazio privato"
+            text = "Le mie applicazioni"
             textSize = 27f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(white)
@@ -178,7 +188,7 @@ class MainActivity : Activity() {
         box.addView(header, matchWrap())
 
         val subtitle = TextView(this).apply {
-            text = "Le tue app, raccolte in un unico posto"
+            text = "Accesso rapido"
             textSize = 14f
             setTextColor(muted)
             setPadding(0, dp(8), 0, dp(22))
@@ -189,8 +199,8 @@ class MainActivity : Activity() {
             text = "+  Aggiungi applicazioni"
             textSize = 15f
             isAllCaps = false
-            setTextColor(white)
-            background = rounded(accent, 18)
+            setTextColor(accent)
+            background = rounded(Color.rgb(24, 75, 42), 18)
             setOnClickListener { showAppPicker() }
         }
         box.addView(add, LinearLayout.LayoutParams(-1, dp(54)))
