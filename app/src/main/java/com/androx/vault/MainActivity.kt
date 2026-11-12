@@ -10,29 +10,39 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
-import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import java.math.BigDecimal
+import java.math.RoundingMode
 
 class MainActivity : Activity() {
+
     private val prefs by lazy { getSharedPreferences("androx_private", MODE_PRIVATE) }
     private val selected = linkedSetOf<String>()
-    private var enteredPin = ""
-    private var setupMode = false
-    private lateinit var root: LinearLayout
-    private lateinit var pinDisplay: TextView
 
-    private val bg = Color.rgb(7, 10, 8)
-    private val panel = Color.rgb(24, 30, 25)
-    private val accent = Color.rgb(50, 220, 105)
-    private val muted = Color.rgb(142, 157, 145)
-    private val white = Color.rgb(235, 245, 237)
-    private val keyNumber = Color.rgb(34, 42, 35)
-    private val keyAction = Color.rgb(24, 75, 42)
+    // Calculator state
+    private var expression = ""
+    private var currentInput = "0"
+    private var lastWasOperator = false
+    private var justEvaluated = false
+
+    private lateinit var root: LinearLayout
+    private lateinit var displayExpression: TextView
+    private lateinit var displayResult: TextView
+
+    // Colors - clean dark calculator look
+    private val bg = Color.parseColor("#0D1110")
+    private val panel = Color.parseColor("#1A221C")
+    private val accent = Color.parseColor("#2EE56D")
+    private val muted = Color.parseColor("#8B9A8E")
+    private val white = Color.parseColor("#E8F0EA")
+    private val keyNumber = Color.parseColor("#252E27")
+    private val keyOperator = Color.parseColor("#1E3A28")
+    private val keyClear = Color.parseColor("#3A2A1E")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,111 +53,308 @@ class MainActivity : Activity() {
     private fun baseScreen(): LinearLayout {
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(22), dp(26), dp(22), dp(20))
+            setPadding(dp(16), dp(20), dp(16), dp(16))
             setBackgroundColor(bg)
-            gravity = Gravity.CENTER_HORIZONTAL
         }
         setContentView(root)
         return root
     }
 
+    // ==================== CALCULATOR UI ====================
+
     private fun showCalculator() {
-        enteredPin = ""
-        setupMode = !prefs.contains("pin")
+        expression = ""
+        currentInput = "0"
+        lastWasOperator = false
+        justEvaluated = false
+
         val box = baseScreen()
+
+        // Top label (subtle)
         val top = TextView(this).apply {
-            text = "CALCOLATRICE"
-            textSize = 13f
-            letterSpacing = .24f
+            text = "Calcolatrice"
+            textSize = 14f
             setTextColor(muted)
             gravity = Gravity.CENTER
+            setPadding(0, dp(4), 0, dp(12))
         }
         box.addView(top, matchWrap())
-        val heading = TextView(this).apply {
-            text = "Calcolatrice"
-            textSize = 28f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(white)
-            gravity = Gravity.CENTER
-        }
-        val hp = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(42) }
-        box.addView(heading, hp)
 
-        pinDisplay = TextView(this).apply {
+        // Expression (small, above)
+        displayExpression = TextView(this).apply {
+            text = ""
+            textSize = 16f
+            setTextColor(muted)
+            gravity = Gravity.END
+            setPadding(dp(12), dp(8), dp(12), 0)
+            maxLines = 1
+        }
+        box.addView(displayExpression, matchWrap())
+
+        // Main result display
+        displayResult = TextView(this).apply {
             text = "0"
             textSize = 48f
+            typeface = Typeface.DEFAULT_BOLD
             setTextColor(white)
-            gravity = Gravity.CENTER
-            setPadding(0, dp(26), 0, dp(26))
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(4), dp(12), dp(16))
+            maxLines = 1
         }
-        box.addView(pinDisplay, LinearLayout.LayoutParams(-1, dp(100)))
+        box.addView(displayResult, LinearLayout.LayoutParams(-1, dp(90)))
 
-        val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val keys = listOf(listOf("7", "8", "9"), listOf("4", "5", "6"), listOf("1", "2", "3"), listOf("⌫", "0", "✓"))
+        // Spacer
+        box.addView(View(this), LinearLayout.LayoutParams(-1, 0, 1f))
+
+        // Button grid
+        val keys = listOf(
+            listOf("C", "⌫", "%", "÷"),
+            listOf("7", "8", "9", "×"),
+            listOf("4", "5", "6", "−"),
+            listOf("1", "2", "3", "+"),
+            listOf("0", ".", "=")
+        )
+
         keys.forEach { rowKeys ->
-            val row = LinearLayout(this).apply { gravity = Gravity.CENTER }
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+            }
             rowKeys.forEach { key ->
-                val button = Button(this).apply {
-                    text = if (key == "✓") "=" else key
-                    textSize = 23f
-                    typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(if (key == "✓") bg else white)
-                    isAllCaps = false
-                    stateListAnimator = null
-                    minHeight = 0
-                    minimumHeight = 0
-                    minWidth = 0
-                    minimumWidth = 0
-                    setPadding(0, 0, 0, 0)
-                    background = rounded(if (key == "✓") accent else keyNumber, 18)
-                    elevation = dp(1).toFloat()
-                    setOnClickListener { onKey(key) }
-                }
-                val lp = LinearLayout.LayoutParams(0, dp(70), 1f).apply {
+                val weight = if (key == "0") 2f else 1f
+                val btn = createKeyButton(key)
+                val lp = LinearLayout.LayoutParams(0, dp(72), weight).apply {
                     setMargins(dp(5), dp(5), dp(5), dp(5))
                 }
-                row.addView(button, lp)
+                row.addView(btn, lp)
             }
-            grid.addView(row, LinearLayout.LayoutParams(-1, -2))
+            // Fill empty space on last row if needed
+            if (rowKeys.size == 3) {
+                val spacer = View(this)
+                row.addView(spacer, LinearLayout.LayoutParams(0, dp(72), 1f).apply {
+                    setMargins(dp(5), dp(5), dp(5), dp(5))
+                })
+            }
+            box.addView(row, LinearLayout.LayoutParams(-1, -2))
         }
-        val gridLp = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(18) }
-        box.addView(grid, gridLp)
-
-        val hint = TextView(this).apply {
-            text = " "
-            textSize = 1f
-            setTextColor(bg)
-            gravity = Gravity.CENTER
-            setPadding(0, dp(8), 0, 0)
-        }
-        box.addView(hint, matchWrap())
     }
 
-    private fun onKey(key: String) {
-        if (key == "⌫") {
-            if (enteredPin.isNotEmpty()) enteredPin = enteredPin.dropLast(1)
-        } else if (key == "✓") {
-            if (setupMode) {
-                if (enteredPin.length in 4..8) {
-                    prefs.edit().putString("pin", enteredPin).apply()
-                    Toast.makeText(this, "PIN creato", Toast.LENGTH_SHORT).show()
-                    showVault()
+    private fun createKeyButton(key: String): Button {
+        val isOperator = key in listOf("÷", "×", "−", "+", "=")
+        val isClear = key in listOf("C", "⌫", "%")
+
+        return Button(this).apply {
+            text = key
+            textSize = if (key == "=") 26f else 22f
+            typeface = Typeface.DEFAULT_BOLD
+            isAllCaps = false
+            stateListAnimator = null
+            minHeight = 0
+            minimumHeight = 0
+            minWidth = 0
+            minimumWidth = 0
+            setPadding(0, 0, 0, 0)
+
+            when {
+                key == "=" -> {
+                    setTextColor(bg)
+                    background = rounded(accent, 20)
+                }
+                isOperator -> {
+                    setTextColor(accent)
+                    background = rounded(keyOperator, 20)
+                }
+                isClear -> {
+                    setTextColor(Color.parseColor("#E8A87C"))
+                    background = rounded(keyClear, 20)
+                }
+                else -> {
+                    setTextColor(white)
+                    background = rounded(keyNumber, 20)
+                }
+            }
+
+            setOnClickListener { onCalculatorKey(key) }
+        }
+    }
+
+    private fun onCalculatorKey(key: String) {
+        when (key) {
+            "C" -> {
+                expression = ""
+                currentInput = "0"
+                lastWasOperator = false
+                justEvaluated = false
+                updateDisplay()
+            }
+            "⌫" -> {
+                if (justEvaluated) {
+                    expression = ""
+                    currentInput = "0"
+                    justEvaluated = false
+                } else if (currentInput.length > 1) {
+                    currentInput = currentInput.dropLast(1)
                 } else {
-                    Toast.makeText(this, "Il PIN deve avere 4–8 cifre", Toast.LENGTH_SHORT).show()
+                    currentInput = "0"
                 }
-            } else {
-                if (enteredPin == prefs.getString("pin", "")) showVault()
-                else {
-                    enteredPin = ""
-                    Toast.makeText(this, "PIN non corretto", Toast.LENGTH_SHORT).show()
+                lastWasOperator = false
+                updateDisplay()
+            }
+            "%" -> {
+                try {
+                    val v = currentInput.toBigDecimal().divide(BigDecimal(100), 10, RoundingMode.HALF_UP)
+                    currentInput = formatNumber(v)
+                    justEvaluated = false
+                    updateDisplay()
+                } catch (_: Exception) {}
+            }
+            "÷", "×", "−", "+" -> {
+                if (justEvaluated) {
+                    expression = currentInput
+                    justEvaluated = false
+                } else if (!lastWasOperator) {
+                    expression += currentInput
+                } else if (expression.isNotEmpty()) {
+                    // replace last operator
+                    expression = expression.dropLast(1)
+                }
+                expression += key
+                lastWasOperator = true
+                currentInput = "0"
+                updateDisplay()
+            }
+            "." -> {
+                if (justEvaluated) {
+                    currentInput = "0."
+                    expression = ""
+                    justEvaluated = false
+                } else if (!currentInput.contains(".")) {
+                    currentInput += "."
+                }
+                lastWasOperator = false
+                updateDisplay()
+            }
+            "=" -> {
+                // Check if current input is the PIN → open vault
+                val pin = prefs.getString("pin", null)
+                if (pin != null && currentInput == pin && !justEvaluated) {
+                    showVault()
+                    return
+                }
+                // First time setup: if no PIN yet and input is 4-8 digits, set it
+                if (pin == null && currentInput.length in 4..8 && currentInput.all { it.isDigit() }) {
+                    prefs.edit().putString("pin", currentInput).apply()
+                    Toast.makeText(this, "PIN impostato", Toast.LENGTH_SHORT).show()
+                    showVault()
+                    return
+                }
+
+                // Normal calculation
+                try {
+                    if (!lastWasOperator) expression += currentInput
+                    val result = evaluate(expression)
+                    currentInput = formatNumber(result)
+                    expression = ""
+                    justEvaluated = true
+                    lastWasOperator = false
+                    updateDisplay()
+                } catch (_: Exception) {
+                    currentInput = "Errore"
+                    expression = ""
+                    justEvaluated = true
+                    updateDisplay()
                 }
             }
-            return
-        } else if (enteredPin.length < 8) enteredPin += key
-
-        pinDisplay.text = if (enteredPin.isEmpty()) "0" else "•".repeat(enteredPin.length)
-        pinDisplay.textSize = 34f
+            else -> { // digit
+                if (justEvaluated) {
+                    currentInput = key
+                    expression = ""
+                    justEvaluated = false
+                } else if (lastWasOperator || currentInput == "0") {
+                    currentInput = key
+                } else if (currentInput.length < 12) {
+                    currentInput += key
+                }
+                lastWasOperator = false
+                updateDisplay()
+            }
+        }
     }
+
+    private fun updateDisplay() {
+        displayExpression.text = expression.replace("×", "×").replace("÷", "÷").replace("−", "−")
+        displayResult.text = currentInput
+        // Shrink text if long
+        displayResult.textSize = when {
+            currentInput.length > 10 -> 32f
+            currentInput.length > 7 -> 40f
+            else -> 48f
+        }
+    }
+
+    private fun evaluate(expr: String): BigDecimal {
+        // Simple left-to-right evaluator for + − × ÷
+        var s = expr.replace("×", "*").replace("÷", "/").replace("−", "-")
+        if (s.isEmpty()) return BigDecimal.ZERO
+
+        val tokens = mutableListOf<String>()
+        var i = 0
+        while (i < s.length) {
+            when {
+                s[i].isDigit() || s[i] == '.' -> {
+                    val start = i
+                    while (i < s.length && (s[i].isDigit() || s[i] == '.')) i++
+                    tokens.add(s.substring(start, i))
+                }
+                s[i] in "+-*/" -> {
+                    tokens.add(s[i].toString())
+                    i++
+                }
+                else -> i++
+            }
+        }
+
+        if (tokens.isEmpty()) return BigDecimal.ZERO
+
+        // First pass: * and /
+        val pass1 = mutableListOf<String>()
+        var j = 0
+        while (j < tokens.size) {
+            if (j + 1 < tokens.size && (tokens[j + 1] == "*" || tokens[j + 1] == "/")) {
+                var acc = tokens[j].toBigDecimal()
+                while (j + 1 < tokens.size && (tokens[j + 1] == "*" || tokens[j + 1] == "/")) {
+                    val op = tokens[j + 1]
+                    val next = tokens[j + 2].toBigDecimal()
+                    acc = if (op == "*") acc.multiply(next) else acc.divide(next, 10, RoundingMode.HALF_UP)
+                    j += 2
+                }
+                pass1.add(acc.toPlainString())
+                j++
+            } else {
+                pass1.add(tokens[j])
+                j++
+            }
+        }
+
+        // Second pass: + and -
+        var result = pass1[0].toBigDecimal()
+        var k = 1
+        while (k < pass1.size) {
+            val op = pass1[k]
+            val next = pass1[k + 1].toBigDecimal()
+            result = if (op == "+") result.add(next) else result.subtract(next)
+            k += 2
+        }
+        return result
+    }
+
+    private fun formatNumber(n: BigDecimal): String {
+        val stripped = n.stripTrailingZeros()
+        return if (stripped.scale() <= 0) stripped.toBigInteger().toString()
+        else stripped.toPlainString()
+    }
+
+    // ==================== VAULT ====================
 
     private data class AppEntry(val label: String, val packageName: String)
 
@@ -165,33 +372,35 @@ class MainActivity : Activity() {
 
     private fun showVault() {
         val box = baseScreen()
+
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
         val title = TextView(this).apply {
             text = "Le mie applicazioni"
-            textSize = 27f
+            textSize = 24f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(white)
         }
         header.addView(title, LinearLayout.LayoutParams(0, -2, 1f))
+
         val settings = Button(this).apply {
             text = "⋮"
-            textSize = 24f
+            textSize = 22f
             setTextColor(white)
             isAllCaps = false
-            background = rounded(panel, 18)
+            background = rounded(panel, 16)
             setOnClickListener { showSettings() }
         }
-        header.addView(settings, LinearLayout.LayoutParams(dp(52), dp(48)))
+        header.addView(settings, LinearLayout.LayoutParams(dp(48), dp(44)))
         box.addView(header, matchWrap())
 
         val subtitle = TextView(this).apply {
-            text = "Accesso rapido"
-            textSize = 14f
+            text = "Accesso rapido alle app nascoste"
+            textSize = 13f
             setTextColor(muted)
-            setPadding(0, dp(8), 0, dp(22))
+            setPadding(0, dp(6), 0, dp(18))
         }
         box.addView(subtitle, matchWrap())
 
@@ -200,33 +409,35 @@ class MainActivity : Activity() {
             textSize = 15f
             isAllCaps = false
             setTextColor(accent)
-            background = rounded(Color.rgb(24, 75, 42), 18)
+            background = rounded(Color.parseColor("#1E3A28"), 16)
             setOnClickListener { showAppPicker() }
         }
-        box.addView(add, LinearLayout.LayoutParams(-1, dp(54)))
+        box.addView(add, LinearLayout.LayoutParams(-1, dp(52)))
 
         val scroll = ScrollView(this)
         val list = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(16), 0, dp(12))
+            setPadding(0, dp(14), 0, dp(8))
         }
+
         val apps = installedApps().filter { selected.contains(it.packageName) }
         if (apps.isEmpty()) {
             val empty = TextView(this).apply {
-                text = "Nessuna app nel vault. Tocca “Aggiungi applicazioni” per iniziare."
+                text = "Nessuna app nel vault.\nTocca “Aggiungi applicazioni” per iniziare."
                 textSize = 15f
                 setTextColor(muted)
                 gravity = Gravity.CENTER
-                setPadding(dp(18), dp(42), dp(18), dp(42))
+                setPadding(dp(16), dp(40), dp(16), dp(40))
             }
             list.addView(empty, matchWrap())
         }
+
         apps.forEach { app ->
             val item = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                background = rounded(panel, 18)
-                setPadding(dp(15), dp(10), dp(10), dp(10))
+                background = rounded(panel, 16)
+                setPadding(dp(16), dp(12), dp(12), dp(12))
                 setOnClickListener { launchApp(app.packageName) }
             }
             val label = TextView(this).apply {
@@ -234,27 +445,29 @@ class MainActivity : Activity() {
                 textSize = 16f
                 setTextColor(white)
             }
-            item.addView(label, LinearLayout.LayoutParams(0, dp(48), 1f))
+            item.addView(label, LinearLayout.LayoutParams(0, dp(44), 1f))
             val open = TextView(this).apply {
-                text = "APRI  ›"
+                text = "APRI ›"
                 textSize = 12f
                 typeface = Typeface.DEFAULT_BOLD
                 setTextColor(accent)
                 gravity = Gravity.CENTER
             }
-            item.addView(open, LinearLayout.LayoutParams(dp(72), dp(48)))
+            item.addView(open, LinearLayout.LayoutParams(dp(70), dp(44)))
             list.addView(item, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
         }
+
         scroll.addView(list)
         box.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+
         val lock = Button(this).apply {
             text = "Blocca vault"
             isAllCaps = false
             setTextColor(muted)
-            background = rounded(panel, 16)
+            background = rounded(panel, 14)
             setOnClickListener { showCalculator() }
         }
-        box.addView(lock, LinearLayout.LayoutParams(-1, dp(50)).apply { topMargin = dp(12) })
+        box.addView(lock, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(10) })
     }
 
     private fun showAppPicker() {
@@ -277,16 +490,22 @@ class MainActivity : Activity() {
 
     private fun launchApp(pkg: String) {
         val launch = packageManager.getLaunchIntentForPackage(pkg)
-        if (launch == null) Toast.makeText(this, "App non avviabile", Toast.LENGTH_SHORT).show()
-        else try { startActivity(launch) } catch (_: Exception) {
-            Toast.makeText(this, "Impossibile aprire questa app", Toast.LENGTH_SHORT).show()
+        if (launch == null) {
+            Toast.makeText(this, "App non avviabile", Toast.LENGTH_SHORT).show()
+        } else {
+            try {
+                startActivity(launch)
+            } catch (_: Exception) {
+                Toast.makeText(this, "Impossibile aprire questa app", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
     private fun showSettings() {
         val input = EditText(this).apply {
             hint = "Nuovo PIN (4–8 cifre)"
-            inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER or
+                    android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
         }
         AlertDialog.Builder(this)
             .setTitle("Cambia PIN")
@@ -296,15 +515,24 @@ class MainActivity : Activity() {
                 if (pin.length in 4..8) {
                     prefs.edit().putString("pin", pin).apply()
                     Toast.makeText(this, "PIN aggiornato", Toast.LENGTH_SHORT).show()
-                } else Toast.makeText(this, "Inserisci 4–8 cifre", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "Inserisci 4–8 cifre", Toast.LENGTH_SHORT).show()
+                }
             }
             .setNegativeButton("Annulla", null)
             .show()
     }
 
-    private fun rounded(color: Int, radius: Int): GradientDrawable =
-        GradientDrawable().apply { setColor(color); cornerRadius = dp(radius).toFloat() }
+    // ==================== HELPERS ====================
 
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+    private fun rounded(color: Int, radius: Int): GradientDrawable =
+        GradientDrawable().apply {
+            setColor(color)
+            cornerRadius = dp(radius).toFloat()
+        }
+
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
+
     private fun matchWrap() = LinearLayout.LayoutParams(-1, -2)
 }
